@@ -168,7 +168,7 @@ namespace Station
                 return;
             }
 
-            if (extraArgs.Count != 0)
+            if (extraArgs.Count != 0 || shouldShowHelp)
             {
                 // show usage
                 Usage(options);

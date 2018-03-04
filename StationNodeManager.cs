@@ -720,7 +720,7 @@ namespace Station
         private const double PRESSURE_DEFAULT = 2500;           // in mbar
         private const double PRESSURE_HIGH = 6000;              // in mbar
         private const double POWERCONSUMPTION_DEFAULT = 150;    // in kW
-        private const ulong IDEAL_CYCLETIME_DEFAULT = 7;
+        private const ulong IDEAL_CYCLETIME_DEFAULT = 7 * 1000; // in ms
 
         private static ulong _idealCycleTimeDefault = IDEAL_CYCLETIME_DEFAULT;
         private static double _powerConsumption = POWERCONSUMPTION_DEFAULT;
