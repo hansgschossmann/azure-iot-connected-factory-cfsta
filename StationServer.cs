@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 
-namespace Station
+namespace CfStation
 {
     public partial class StationServer : StandardServer
     {

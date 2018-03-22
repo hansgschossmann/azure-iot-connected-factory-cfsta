@@ -3,34 +3,28 @@ using Opc.Ua;
 using System;
 using System.Security.Cryptography.X509Certificates;
 
-namespace Station
+namespace CfStation
 {
     using System.Threading.Tasks;
     using static Opc.Ua.CertificateStoreType;
     using static Program;
 
-    public class OpcStackConfiguration
+    public class OpcApplicationConfiguration
     {
-        public static ApplicationConfiguration OpcApplicationConfiguration => _configuration;
+        public static ApplicationConfiguration ApplicationConfiguration => _configuration;
 
         public static string StationHostname
         {
             get => _stationHostname;
-            set => _stationHostname = value;
+            set => _stationHostname = value.ToLowerInvariant();
         }
 
-        public static string StationHostnameLabel => (_stationHostname.Contains(".") ? _stationHostname.Substring(0, _stationHostname.IndexOf('.')).ToLowerInvariant() : _stationHostname);
-        public static string ApplicationName => $"{_stationHostname.ToLowerInvariant()}";
+        public static string StationHostnameLabel => (_stationHostname.Contains(".") ? _stationHostname.Substring(0, _stationHostname.IndexOf('.')) : _stationHostname);
+        public static string ApplicationName => $"{_stationHostname}";
 
-        public static string ApplicationUri => $"urn:{StationHostnameLabel}{(string.IsNullOrEmpty(_serverPath) ? string.Empty : ":")}{_serverPath.Replace("/", ":").ToLowerInvariant()}";
+        public static string ApplicationUri => $"urn:{StationHostnameLabel}{(string.IsNullOrEmpty(_serverPath) ? string.Empty : (_serverPath.StartsWith("/") ? string.Empty : ":"))}{_serverPath.Replace("/", ":")}";
 
-        public static string ProductUri => $"http://contoso.com/UA/{StationHostnameLabel}";
-
-        public static string LogFileName
-        {
-            get => _logFileName;
-            set => _logFileName = value;
-        }
+        public static string ProductUri => $"https://github.com/azure/azure-iot-connected-factory-cfstation.git";
 
         public static ushort ServerPort
         {
@@ -125,10 +119,23 @@ namespace Station
             set => _ldsRegistrationInterval = value;
         }
 
+        public static bool AutoAcceptCerts
+        {
+            get => _autoAcceptCerts;
+            set => _autoAcceptCerts = value;
+        }
+
+        public static int OpcTraceToLoggerVerbose = 0;
+        public static int OpcTraceToLoggerDebug = 0;
+        public static int OpcTraceToLoggerInformation = 0;
+        public static int OpcTraceToLoggerWarning = 0;
+        public static int OpcTraceToLoggerError = 0;
+        public static int OpcTraceToLoggerFatal = 0;
+
         /// <summary>
         /// Configures all OPC stack settings
         /// </summary>
-        public async Task ConfigureAsync()
+        public async Task<ApplicationConfiguration> ConfigureAsync()
         {
             // Instead of using a Config.xml we configure everything programmatically.
 
@@ -144,49 +151,18 @@ namespace Station
             _configuration.ApplicationType = ApplicationType.Server;
 
             //
+            // TraceConfiguration
+            //
+            _configuration.TraceConfiguration = new TraceConfiguration();
+            _configuration.TraceConfiguration.TraceMasks = _opcStackTraceMask;
+            _configuration.TraceConfiguration.ApplySettings();
+            Utils.Tracing.TraceEventHandler += new EventHandler<TraceEventArgs>(LoggerOpcUaTraceHandler);
+            Logger.Information($"opcstacktracemask set to: 0x{_opcStackTraceMask:X}");
+
+            //
             // Security configuration
             //
             _configuration.SecurityConfiguration = new SecurityConfiguration();
-
-            // Application certificate
-            _configuration.SecurityConfiguration.ApplicationCertificate = new CertificateIdentifier();
-            _configuration.SecurityConfiguration.ApplicationCertificate.StoreType = _opcOwnCertStoreType;
-            _configuration.SecurityConfiguration.ApplicationCertificate.StorePath = _opcOwnCertStorePath;
-            _configuration.SecurityConfiguration.ApplicationCertificate.SubjectName = _configuration.ApplicationName;
-            Logger.Information($"Application Certificate store type is: {_configuration.SecurityConfiguration.ApplicationCertificate.StoreType}");
-            Logger.Information($"Application Certificate store path is: {_configuration.SecurityConfiguration.ApplicationCertificate.StorePath}");
-            Logger.Information($"Application Certificate subject name is: {_configuration.SecurityConfiguration.ApplicationCertificate.SubjectName}");
-
-            // Use existing certificate, if it is there.
-            X509Certificate2 certificate = await _configuration.SecurityConfiguration.ApplicationCertificate.Find(true);
-            if (certificate == null)
-            {
-                Logger.Information($"No existing Application certificate found. Create a self-signed Application certificate valid from yesterday for {CertificateFactory.defaultLifeTime} months,");
-                Logger.Information($"with a {CertificateFactory.defaultKeySize} bit key and {CertificateFactory.defaultHashSize} bit hash.");
-                certificate = CertificateFactory.CreateCertificate(
-                    _configuration.SecurityConfiguration.ApplicationCertificate.StoreType,
-                    _configuration.SecurityConfiguration.ApplicationCertificate.StorePath,
-                    null,
-                    _configuration.ApplicationUri,
-                    _configuration.ApplicationName,
-                    _configuration.ApplicationName,
-                    null,
-                    CertificateFactory.defaultKeySize,
-                    DateTime.UtcNow - TimeSpan.FromDays(1),
-                    CertificateFactory.defaultLifeTime,
-                    CertificateFactory.defaultHashSize,
-                    false,
-                    null,
-                    null
-                    );
-                _configuration.SecurityConfiguration.ApplicationCertificate.Certificate = certificate ?? throw new Exception("OPC UA application certificate can not be created! Cannot continue without it!");
-            }
-            else
-            {
-                Logger.Information("Application certificate found in Application Certificate Store");
-            }
-            _configuration.ApplicationUri = Utils.GetApplicationUriFromCertificate(certificate);
-            Logger.Information($"Application certificate is for Application URI '{_configuration.ApplicationUri}', Application '{_configuration.ApplicationName} and has Subject '{_configuration.ApplicationName}'");
 
             // TrustedIssuerCertificates
             _configuration.SecurityConfiguration.TrustedIssuerCertificates = new CertificateTrustList();
@@ -219,12 +195,16 @@ namespace Station
             _configuration.SecurityConfiguration.RejectedCertificateStore = new CertificateTrustList();
             _configuration.SecurityConfiguration.RejectedCertificateStore.StoreType = _opcRejectedCertStoreType;
             _configuration.SecurityConfiguration.RejectedCertificateStore.StorePath = _opcRejectedCertStorePath;
+
             Logger.Information($"Rejected certificate store type is: {_configuration.SecurityConfiguration.RejectedCertificateStore.StoreType}");
             Logger.Information($"Rejected Certificate store path is: {_configuration.SecurityConfiguration.RejectedCertificateStore.StorePath}");
 
             // AutoAcceptUntrustedCertificates
             // This is a security risk and should be set to true only for debugging purposes.
             _configuration.SecurityConfiguration.AutoAcceptUntrustedCertificates = false;
+
+            // AddAppCertToTrustStore: this does only work on Application objects, here for completeness
+            _configuration.SecurityConfiguration.AddAppCertToTrustedStore = TrustMyself;
 
             // RejectSHA1SignedCertificates
             // We allow SHA1 certificates for now as many OPC Servers still use them
@@ -236,7 +216,60 @@ namespace Station
             _configuration.SecurityConfiguration.MinimumCertificateKeySize = 1024;
             Logger.Information($"Minimum certificate key size set to {_configuration.SecurityConfiguration.MinimumCertificateKeySize}");
 
+            // Application certificate
+            _configuration.SecurityConfiguration.ApplicationCertificate = new CertificateIdentifier();
+            _configuration.SecurityConfiguration.ApplicationCertificate.StoreType = _opcOwnCertStoreType;
+            _configuration.SecurityConfiguration.ApplicationCertificate.StorePath = _opcOwnCertStorePath;
+            _configuration.SecurityConfiguration.ApplicationCertificate.SubjectName = _configuration.ApplicationName;
+            Logger.Information($"Application Certificate store type is: {_configuration.SecurityConfiguration.ApplicationCertificate.StoreType}");
+            Logger.Information($"Application Certificate store path is: {_configuration.SecurityConfiguration.ApplicationCertificate.StorePath}");
+            Logger.Information($"Application Certificate subject name is: {_configuration.SecurityConfiguration.ApplicationCertificate.SubjectName}");
+
+            // handle cert validation
+            if (_autoAcceptCerts)
+            {
+                Logger.Warning("WARNING: Automatically accepting certificates. This is a security risk.");
+                _configuration.SecurityConfiguration.AutoAcceptUntrustedCertificates = true;
+            }
+            _configuration.CertificateValidator = new Opc.Ua.CertificateValidator();
+            _configuration.CertificateValidator.CertificateValidation += new Opc.Ua.CertificateValidationEventHandler(CertificateValidator_CertificateValidation);
+
+            //// update security information
+            await _configuration.CertificateValidator.Update(_configuration.SecurityConfiguration);
+
+            // Use existing certificate, if it is there.
+            X509Certificate2 certificate = await _configuration.SecurityConfiguration.ApplicationCertificate.Find(true);
+            if (certificate == null)
+            {
+                Logger.Information($"No existing Application certificate found. Create a self-signed Application certificate valid from yesterday for {CertificateFactory.defaultLifeTime} months,");
+                Logger.Information($"with a {CertificateFactory.defaultKeySize} bit key and {CertificateFactory.defaultHashSize} bit hash.");
+                certificate = CertificateFactory.CreateCertificate(
+                    _configuration.SecurityConfiguration.ApplicationCertificate.StoreType,
+                    _configuration.SecurityConfiguration.ApplicationCertificate.StorePath,
+                    null,
+                    _configuration.ApplicationUri,
+                    _configuration.ApplicationName,
+                    _configuration.ApplicationName,
+                    null,
+                    CertificateFactory.defaultKeySize,
+                    DateTime.UtcNow - TimeSpan.FromDays(1),
+                    CertificateFactory.defaultLifeTime,
+                    CertificateFactory.defaultHashSize,
+                    false,
+                    null,
+                    null
+                    );
+                _configuration.SecurityConfiguration.ApplicationCertificate.Certificate = certificate ?? throw new Exception("OPC UA application certificate can not be created! Cannot continue without it!");
+            }
+            else
+            {
+                Logger.Information("Application certificate found in Application Certificate Store");
+            }
+            _configuration.ApplicationUri = Utils.GetApplicationUriFromCertificate(certificate);
+            Logger.Information($"Application certificate is for Application URI '{_configuration.ApplicationUri}', Application '{_configuration.ApplicationName} and has Subject '{_configuration.ApplicationName}'");
+
             // We make the default reference stack behavior configurable to put our own certificate into the trusted peer store.
+            // Note: SecurityConfiguration.AddAppCertToTrustedStore only works for Application instance objects, which we do not have.
             if (_trustMyself)
             {
                 // Ensure it is trusted
@@ -306,63 +339,99 @@ namespace Station
             _configuration.ServerConfiguration.MaxRegistrationInterval = _ldsRegistrationInterval;
             Logger.Information($"LDS(-ME) registration intervall set to {_ldsRegistrationInterval} ms (0 means no registration)");
 
-            //
-            // TraceConfiguration
-            //
-            _configuration.TraceConfiguration = new TraceConfiguration();
-            // Due to a bug in a stack we need to do console output ourselve.
-            Utils.SetTraceOutput(Utils.TraceOutput.FileOnly);
+            // validate the configuration now
+            await _configuration.Validate(_configuration.ApplicationType);
+            return _configuration;
+        }
 
-            // OutputFilePath
-            if (string.IsNullOrEmpty(_logFileName))
+        /// <summary>
+        /// Event handler to validate certificates.
+        /// </summary>
+        private static void CertificateValidator_CertificateValidation(Opc.Ua.CertificateValidator validator, Opc.Ua.CertificateValidationEventArgs e)
+        {
+            if (e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateUntrusted)
             {
-                if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("_GW_LOGP")))
+                e.Accept = _autoAcceptCerts;
+                if (_autoAcceptCerts)
                 {
-                    _configuration.TraceConfiguration.OutputFilePath = Environment.GetEnvironmentVariable("_GW_LOGP");
+                    Logger.Information($"Accepting Certificate: {e.Certificate.Subject}");
                 }
                 else
                 {
-                    _configuration.TraceConfiguration.OutputFilePath = "./Logs/" + _configuration.ApplicationName + ".log.txt";
+                    Logger.Information($"Rejecting Certificate: {e.Certificate.Subject}");
                 }
             }
-            else
-            {
-                _configuration.TraceConfiguration.OutputFilePath = _logFileName;
-            }
-
-            // DeleteOnLoad
-            _configuration.TraceConfiguration.DeleteOnLoad = false;
-
-            // TraceMasks
-            _configuration.TraceConfiguration.TraceMasks = _opcStackTraceMask;
-
-            // Apply the settings
-            _configuration.TraceConfiguration.ApplySettings();
-            Logger.Information($"Current directory is: {System.IO.Directory.GetCurrentDirectory()}");
-            Logger.Information($"Log file is: {Utils.GetAbsoluteFilePath(_configuration.TraceConfiguration.OutputFilePath, true, false, false, true)}");
-            Logger.Information($"opcstacktracemask set to: 0x{_opcStackTraceMask:X} ({_opcStackTraceMask})");
-
-            // validate the configuration now
-            await _configuration.Validate(_configuration.ApplicationType);
         }
 
-        private static string _stationHostname = $"{Utils.GetHostName()}";
-        private static string _logFileName;
+        /// <summary>
+        /// Event handler to log OPC UA stack trace messages into own logger.
+        /// </summary>
+        private static void LoggerOpcUaTraceHandler(object sender, TraceEventArgs e)
+        {
+            // return fast if no trace needed
+            if ((e.TraceMask & _opcStackTraceMask) == 0)
+            {
+                return;
+            }
+
+            // e.Exception and e.Message are always null
+
+            // format the trace message
+            string message = string.Empty;
+            message = string.Format(e.Format, e.Arguments).Trim();
+            message = "OPC: " + message;
+
+            // map logging level
+            if ((e.TraceMask & OpcTraceToLoggerVerbose) != 0)
+            {
+                Logger.Verbose(message);
+                return;
+            }
+            if ((e.TraceMask & OpcTraceToLoggerDebug) != 0)
+            {
+                Logger.Debug(message);
+                return;
+            }
+            if ((e.TraceMask & OpcTraceToLoggerInformation) != 0)
+            {
+                Logger.Information(message);
+                return;
+            }
+            if ((e.TraceMask & OpcTraceToLoggerWarning) != 0)
+            {
+                Logger.Warning(message);
+                return;
+            }
+            if ((e.TraceMask & OpcTraceToLoggerError) != 0)
+            {
+                Logger.Error(message);
+                return;
+            }
+            if ((e.TraceMask & OpcTraceToLoggerFatal) != 0)
+            {
+                Logger.Fatal(message);
+                return;
+            }
+            return;
+        }
+
+        private static string _stationHostname = $"{Utils.GetHostName().ToLowerInvariant()}";
         private static ushort _serverPort = 51210;
         private static string _serverPath = string.Empty;
-        private static bool _trustMyself = true;
-        private static int _opcStackTraceMask = Utils.TraceMasks.Error | Utils.TraceMasks.Security | Utils.TraceMasks.StackTrace | Utils.TraceMasks.StartStop;
+        private static bool _trustMyself = false;
+        private static int _opcStackTraceMask = 0;
 
         private static string _serverSecurityPolicy = SecurityPolicies.Basic128Rsa15;
         private static string _opcOwnCertStoreType = X509Store;
         private static string _opcOwnCertStorePath = OpcOwnCertX509StorePathDefault;
         private static string _opcTrustedCertStoreType = Directory;
-        private static string _opcTrustedCertStorePath = null;
+        private static string _opcTrustedCertStorePath = OpcTrustedCertDirectoryStorePathDefault;
         private static string _opcRejectedCertStoreType = Directory;
         private static string _opcRejectedCertStorePath = OpcRejectedCertDirectoryStorePathDefault;
         private static string _opcIssuerCertStoreType = Directory;
         private static string _opcIssuerCertStorePath = OpcIssuerCertDirectoryStorePathDefault;
         private static int _ldsRegistrationInterval = 0;
         private static ApplicationConfiguration _configuration;
+        private static bool _autoAcceptCerts = false;
     }
 }

@@ -1,5 +1,5 @@
 
-namespace Station
+namespace CfStation
 {
     /// <summary>
     /// Defines constants for namespaces used by the application.
