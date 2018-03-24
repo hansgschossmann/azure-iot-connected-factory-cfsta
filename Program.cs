@@ -66,22 +66,9 @@ namespace CfStation
                         }
                     }
                 },
-                { "st|opcstacktracemask=", $"the trace mask in hex digits for the OPC stack. See github OPC .NET stack for definitions.\nDefault: {OpcStackTraceMask:X}", (string s) => {
-                        int i = OpcStackTraceMask;
-                        if (int.TryParse(s, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out i) && i >= 0)
-                        {
-                            OpcStackTraceMask = i;
-                        }
-                        else
-                        {
-                            throw new Mono.Options.OptionException("The OPC stack trace mask must be larger or equal 0 and hexadecimal (no 0x prefix allowed).", "opcstacktracemask");
-                        }
-                    }
-                },
                 { "aa|autoacceptcerts", $"all certs are trusted when a connection is established.\nDefault: {AutoAcceptCerts}", a => AutoAcceptCerts = a != null },
 
-                // trust own public cert option
-                { "tm|trustmyself", $"the server certificate is put into the trusted certificate store automatically.\nDefault: {TrustMyself}", t => TrustMyself = t != null },
+                { "to|trustowncert", $"the cfstation certificate is put into the trusted certificate store automatically.\nDefault: {TrustMyself}", t => TrustMyself = t != null },
 
                 { "ap|appcertstorepath=", $"the path where the own application cert should be stored\nDefault '{OpcOwnCertX509StorePathDefault}'", (string s) => OpcOwnCertStorePath = s
                 },
