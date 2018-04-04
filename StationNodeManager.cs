@@ -694,11 +694,14 @@ namespace CfStation
             ActualCycleTime = (ulong)(DateTime.Now - _cycleStartTime).TotalMilliseconds;
             Logger.Verbose($"Actual cycle time is {ActualCycleTime}");
 
-            double idealCycleTime = IdealCycleTime;
-
             // The power consumption of the station increases exponentially if the ideal cycle time is reduced below the default ideal cycle time 
+            double idealCycleTime = IdealCycleTime;
             double cycleTimeModifier = (1 / Math.E) * (1 / Math.Exp(-(double)_idealCycleTimeDefault / idealCycleTime));
+            Logger.Verbose($"Cycle time modifier is {cycleTimeModifier}");
+            Logger.Verbose($"Ideal cycle time default is {_idealCycleTimeDefault}");
+            Logger.Verbose($"Ideal cycle time is {idealCycleTime}");
             _powerConsumptionAdjusted = _powerConsumption * cycleTimeModifier;
+            Logger.Verbose($"Power consumption is {_powerConsumption}");
             Logger.Verbose($"Adjusted power consumption is {_powerConsumptionAdjusted}");
 
             // assume the station consumes only power during the active cycle
