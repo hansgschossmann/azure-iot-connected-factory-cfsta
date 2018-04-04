@@ -216,12 +216,12 @@ namespace CfStation
                     break;
                 case "debug":
                     loggerConfiguration.MinimumLevel.Debug();
-                    OpcStackTraceMask = OpcTraceToLoggerDebug = Utils.TraceMasks.ServiceDetail | Utils.TraceMasks.OperationDetail | Utils.TraceMasks.Service |
+                    OpcStackTraceMask = OpcTraceToLoggerDebug = Utils.TraceMasks.StackTrace | Utils.TraceMasks.Operation | Utils.TraceMasks.Information |
                         Utils.TraceMasks.StartStop | Utils.TraceMasks.ExternalSystem | Utils.TraceMasks.Security;
                     break;
                 case "verbose":
                     loggerConfiguration.MinimumLevel.Verbose();
-                    OpcStackTraceMask = OpcTraceToLoggerVerbose = Utils.TraceMasks.StackTrace | Utils.TraceMasks.Operation | Utils.TraceMasks.Information | Utils.TraceMasks.All;
+                    OpcStackTraceMask = OpcTraceToLoggerVerbose = Utils.TraceMasks.All;
                     break;
             }
 
