@@ -687,18 +687,24 @@ namespace CfStation
                 StationState = StationStatus.Done;
                 NumberOfManufacturedProducts++;
             }
+            Logger.Verbose($"Station status is '{StationState}'");
+            Logger.Verbose($"Number of manufacturered products is {NumberOfManufacturedProducts}");
+            Logger.Verbose($"Number of discarded products is {NumberOfDiscardedProducts}");
 
             ActualCycleTime = (ulong)(DateTime.Now - _cycleStartTime).TotalMilliseconds;
+            Logger.Verbose($"Actual cycle time is {ActualCycleTime}");
 
             double idealCycleTime = IdealCycleTime;
 
             // The power consumption of the station increases exponentially if the ideal cycle time is reduced below the default ideal cycle time 
             double cycleTimeModifier = (1 / Math.E) * (1 / Math.Exp(-(double)_idealCycleTimeDefault / idealCycleTime));
             _powerConsumptionAdjusted = _powerConsumption * cycleTimeModifier;
+            Logger.Verbose($"Adjusted power consumption is {_powerConsumptionAdjusted}");
 
             // assume the station consumes only power during the active cycle
             // energy consumption [kWh] = (PowerConsumption [kW] * actualCycleTime [s]) / 3600
             EnergyConsumption = (_powerConsumptionAdjusted * (ActualCycleTime / 1000.0)) / 3600.0;
+            Logger.Verbose($"New energy consumption is {EnergyConsumption}");
 
             // For stations configured to generate alerts, calculate pressure
             // Pressure will be stable for PRESSURE_STABLE_TIME and then will increase to PRESSURE_HIGH and stay there until OpenPressureReleaseValve() is called
@@ -706,11 +712,13 @@ namespace CfStation
             {
                 // slowly increase pressure until PRESSURE_HIGH is reached
                 Pressure += NormalDistribution(_random, (cycleTimeModifier - 1.0) * 10.0, 10.0);
-
+                Logger.Verbose($"New pressure is {Pressure}");
                 if (Pressure <= PRESSURE_DEFAULT)
                     Pressure = PRESSURE_DEFAULT * NormalDistribution(_random, 0.0, 10.0);
+                    Logger.Verbose($"Pressure below default ({PRESSURE_DEFAULT}). Now set to {Pressure}");
                 if (Pressure >= PRESSURE_HIGH)
                     Pressure = PRESSURE_HIGH * NormalDistribution(_random, 0.0, 10.0);
+                    Logger.Verbose($"Pressure above max ({PRESSURE_HIGH}). Now set to {Pressure}");
             }
         }
 
