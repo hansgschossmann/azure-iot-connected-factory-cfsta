@@ -657,6 +657,7 @@ namespace CfStation
             double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
 
             // random normal(mean,stdDev^2)
+            //Logger.Debug($"NormalDistribution: mean: {mean}, stdDev: {stdDev},  randStdNormal: {randStdNormal}, return: {mean + stdDev * randStdNormal}, u1: {u1}, u2: {u2},");
             return mean + stdDev * randStdNormal;
         }
 
@@ -665,6 +666,16 @@ namespace CfStation
             CalculateSimulationResult((bool)state);
             UpdateFaultyTime();
             _simulationTimer.Dispose();
+            _simulationTimer = null;
+        }
+
+        private void StopPressureHighPhase(object unused)
+        {
+            Logger.Debug("Stop pressure high phase");
+            Pressure = PRESSURE_DEFAULT;
+            _pressureStableStartTime = DateTime.Now;
+            _pressureHighTimer.Dispose();
+            _pressureHighTimer = null;
         }
 
         public virtual void CalculateSimulationResult(bool stationFailure)
@@ -710,33 +721,48 @@ namespace CfStation
             Logger.Debug($"New energy consumption is {EnergyConsumption}");
 
             // For stations configured to generate alerts, calculate pressure
-            // Pressure will be stable for PRESSURE_STABLE_TIME and then will increase to PRESSURE_HIGH and stay there until OpenPressureReleaseValve() is called
-            if (_generateAlerts && (((DateTime.Now - _pressureStableStartTime).TotalMilliseconds) > PRESSURE_STABLE_TIME))
+            // Pressure will be stable for PRESSURE_STABLE_TIME and then will increase to PRESSURE_HIGH and stay there PRESSURE_HIGH_TIME or until OpenPressureReleaseValve() is called
+            double normalDist = NormalDistribution(_random, (cycleTimeModifier - 1.0) * 100.0, 50.0);
+            if (_generateAlerts && ((DateTime.Now - _pressureStableStartTime).TotalMilliseconds) > PRESSURE_STABLE_TIME)
             {
                 // slowly increase pressure until PRESSURE_HIGH is reached
-                Pressure += NormalDistribution(_random, (cycleTimeModifier - 1.0) * 10.0, 10.0);
-                Logger.Debug($"New pressure is {Pressure}");
+                Logger.Debug($"Current pressure is {Pressure}");
+                Pressure += Math.Abs(normalDist);
+                Logger.Debug($"New pressure is {Pressure} using {Math.Abs(normalDist)}");
+
                 if (Pressure <= PRESSURE_DEFAULT)
-                    Pressure = PRESSURE_DEFAULT * NormalDistribution(_random, 0.0, 10.0);
-                    Logger.Debug($"Pressure below default ({PRESSURE_DEFAULT}). Now set to {Pressure}");
+                {
+                    Pressure = PRESSURE_DEFAULT + normalDist;
+                    Logger.Debug($"Pressure is below default ({PRESSURE_DEFAULT}). Now set to {Pressure} using {normalDist}");
+                }
                 if (Pressure >= PRESSURE_HIGH)
-                    Pressure = PRESSURE_HIGH * NormalDistribution(_random, 0.0, 10.0);
-                    Logger.Debug($"Pressure above max ({PRESSURE_HIGH}). Now set to {Pressure}");
+                {
+                    if (_pressureHighTimer == null && PRESSURE_HIGH_TIME != 0)
+                    {
+                        Logger.Debug($"--> Starting Pressure high timer.");
+                        _pressureHighTimer = new Timer(StopPressureHighPhase, null, (int)PRESSURE_HIGH_TIME, Timeout.Infinite);
+                    }
+                    Pressure = PRESSURE_HIGH + normalDist;
+                    Logger.Debug($"Pressure above max ({PRESSURE_HIGH}). Now set to {Pressure} using {normalDist}");
+                }
+            }
+            else
+            {
+                Pressure += normalDist;
+                Logger.Debug($"New pressure is {Pressure} using {normalDist}");
             }
         }
 
-
         private const int FAILURE_CYCLE_TIME = 5000;            // in ms
-        private const ulong PRESSURE_STABLE_TIME = 30 * 1000;   // in ms
+        private const ulong PRESSURE_STABLE_TIME = 60 * 1000;   // in ms
+        private const ulong PRESSURE_HIGH_TIME = 120 * 1000;     // in ms
         private const double PRESSURE_DEFAULT = 2500;           // in mbar
         private const double PRESSURE_HIGH = 6000;              // in mbar
         private const double POWERCONSUMPTION_DEFAULT = 150;    // in kW
         private const ulong IDEAL_CYCLETIME_DEFAULT = 7 * 1000; // in ms
-
         private static ulong _idealCycleTimeDefault = IDEAL_CYCLETIME_DEFAULT;
         private static double _powerConsumption = POWERCONSUMPTION_DEFAULT;
         private static bool _generateAlerts = false;
-
         private BaseDataVariableState _productSerialNumber = null;
         private BaseDataVariableState _numberOfManufacturedProducts = null;
         private BaseDataVariableState _numberOfDiscardedProducts = null;
@@ -752,6 +778,7 @@ namespace CfStation
         private DateTime _cycleStartTime;
         private ulong _idealCycleTimeMinimum;
         private Timer _simulationTimer = null;
+        private Timer _pressureHighTimer = null;
         private Random _random;
         private double _powerConsumptionAdjusted;
     }
