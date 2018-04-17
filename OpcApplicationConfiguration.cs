@@ -339,6 +339,12 @@ namespace CfStation
             _configuration.ServerConfiguration.MaxRegistrationInterval = _ldsRegistrationInterval;
             Logger.Information($"LDS(-ME) registration intervall set to {_ldsRegistrationInterval} ms (0 means no registration)");
 
+            // UserTokenPolicies
+            _configuration.ServerConfiguration.UserTokenPolicies.Add(new UserTokenPolicy() { TokenType = UserTokenType.Anonymous });
+            _configuration.ServerConfiguration.UserTokenPolicies.Add(new UserTokenPolicy() { TokenType = UserTokenType.UserName });
+
+            Logger.Information($"Security policy {newPolicy.SecurityPolicyUri} with mode {newPolicy.SecurityMode} added");
+
             // validate the configuration now
             await _configuration.Validate(_configuration.ApplicationType);
             return _configuration;
@@ -421,7 +427,7 @@ namespace CfStation
         private static bool _trustMyself = false;
         private static int _opcStackTraceMask = 0;
 
-        private static string _serverSecurityPolicy = SecurityPolicies.Basic128Rsa15;
+        private static string _serverSecurityPolicy = SecurityPolicies.Basic256Sha256;
         private static string _opcOwnCertStoreType = X509Store;
         private static string _opcOwnCertStorePath = OpcOwnCertX509StorePathDefault;
         private static string _opcTrustedCertStoreType = Directory;

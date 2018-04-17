@@ -1,9 +1,9 @@
 
 using Opc.Ua;
 using Opc.Ua.Server;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Threading;
 
 namespace CfStation
 {
@@ -70,45 +70,70 @@ namespace CfStation
         }
 
         /// <summary>
-        /// Cleans up before the server shuts down.
+        /// Called after the server has been started.
         /// </summary>
-        /// <remarks>
-        /// This method is called before any shutdown processing occurs.
-        /// </remarks>
-        protected override void OnServerStopping()
+        protected override void OnServerStarted(IServerInternal server)
         {
-            try
-            {
-                // check for connected clients
-                IList<Session> currentessions = this.ServerInternal.SessionManager.GetSessions();
+            base.OnServerStarted(server);
 
-                if (currentessions.Count > 0)
-                {
-                    // provide some time for the connected clients to detect the shutdown state.
-                    ServerInternal.Status.Value.ShutdownReason = new LocalizedText("en-US", "Application closed.");
-                    ServerInternal.Status.Variable.ShutdownReason.Value = new LocalizedText("en-US", "Application closed.");
-                    ServerInternal.Status.Value.State = ServerState.Shutdown;
-                    ServerInternal.Status.Variable.State.Value = ServerState.Shutdown;
-                    ServerInternal.Status.Variable.ClearChangeMasks(ServerInternal.DefaultSystemContext, true);
-
-                    for (uint timeTillShutdown = _stationShutdownWaitPeriod; timeTillShutdown > 0; timeTillShutdown--)
-                    {
-                        ServerInternal.Status.Value.SecondsTillShutdown = timeTillShutdown;
-                        ServerInternal.Status.Variable.SecondsTillShutdown.Value = timeTillShutdown;
-                        ServerInternal.Status.Variable.ClearChangeMasks(ServerInternal.DefaultSystemContext, true);
-
-                        Thread.Sleep(1000);
-                    }
-                }
-            }
-            catch
-            {
-                // ignore error during shutdown procedure.
-            }
-
-            base.OnServerStopping();
+            // request notifications when the user identity is changed. all valid users are accepted by default.
+            server.SessionManager.ImpersonateUser += new ImpersonateEventHandler(SessionManager_ImpersonateUser);
         }
 
-        private static uint _stationShutdownWaitPeriod = 10;
+        /// <summary>
+        /// Called when a client tries to change its user identity.
+        /// </summary>
+        private void SessionManager_ImpersonateUser(Session session, ImpersonateEventArgs args)
+        {
+            // check for a user name token.
+            UserNameIdentityToken userNameToken = args.NewIdentity as UserNameIdentityToken;
+            if (userNameToken != null)
+            {
+                args.Identity = VerifyPassword(userNameToken);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Validates the password for a username token.
+        /// </summary>
+        private IUserIdentity VerifyPassword(UserNameIdentityToken userNameToken)
+        {
+            var userName = userNameToken.UserName;
+            var password = userNameToken.DecryptedPassword;
+            if (String.IsNullOrEmpty(userName))
+            {
+                // an empty username is not accepted.
+                throw ServiceResultException.Create(StatusCodes.BadIdentityTokenInvalid,
+                    "Security token is not a valid username token. An empty username is not accepted.");
+            }
+
+            if (String.IsNullOrEmpty(password))
+            {
+                // an empty password is not accepted.
+                throw ServiceResultException.Create(StatusCodes.BadIdentityTokenRejected,
+                    "Security token is not a valid username token. An empty password is not accepted.");
+            }
+
+            // User with permission to configure server
+            if (userName == "sysadmin" && password == "demo")
+            {
+                return new SystemConfigurationIdentity(new UserIdentity(userNameToken));
+            }
+
+            // construct translation object with default text.
+            TranslationInfo info = new TranslationInfo(
+                "InvalidPassword",
+                "en-US",
+                "Invalid username or password.",
+                userName);
+
+            // create an exception with a vendor defined sub-code.
+            throw new ServiceResultException(new ServiceResult(
+                StatusCodes.BadUserAccessDenied,
+                "InvalidPassword",
+                LoadServerProperties().ProductUri,
+                new LocalizedText(info)));
+        }
     }
 }
