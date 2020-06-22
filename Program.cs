@@ -194,7 +194,7 @@ namespace CfStation
 
             try
             {
-                await ConsoleServerAsync(args).ConfigureAwait(false);
+                await ConsoleServerAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -203,7 +203,7 @@ namespace CfStation
             Logger.Information("OPC UA server exiting...");
         }
 
-        private static async Task ConsoleServerAsync(string[] args)
+        private static async Task ConsoleServerAsync()
         {
             var quitEvent = new ManualResetEvent(false);
 
