@@ -1,372 +1,181 @@
-﻿
-using Opc.Ua;
+﻿using Opc.Ua;
 using System;
-using System.Security.Cryptography.X509Certificates;
 
 namespace CfStation
 {
+    using System.Globalization;
     using System.Threading.Tasks;
-    using static Opc.Ua.CertificateStoreType;
     using static Program;
 
-    public class OpcApplicationConfiguration
+    /// <summary>
+    /// Class for OPC Application configuration.
+    /// </summary>
+    public partial class OpcApplicationConfiguration
     {
-        public static ApplicationConfiguration ApplicationConfiguration => _configuration;
-
-        public static string StationHostname
+        /// <summary>
+        /// Configuration info for the OPC application.
+        /// </summary>
+        public static ApplicationConfiguration ApplicationConfiguration { get; private set; }
+        public static string Hostname
         {
-            get => _stationHostname;
-            set => _stationHostname = value.ToLowerInvariant();
+            get => _hostname;
+#pragma warning disable CA1308 // Normalize strings to uppercase
+            set => _hostname = value.ToLowerInvariant();
+#pragma warning restore CA1308 // Normalize strings to uppercase
         }
 
-        public static string StationHostnameLabel => (_stationHostname.Contains(".") ? _stationHostname.Substring(0, _stationHostname.IndexOf('.')) : _stationHostname);
-        public static string ApplicationName => $"{_stationHostname}";
-
-        public static string ApplicationUri => $"urn:{StationHostnameLabel}{(string.IsNullOrEmpty(_serverPath) ? string.Empty : (_serverPath.StartsWith("/") ? string.Empty : ":"))}{_serverPath.Replace("/", ":")}";
-
-        public static string ProductUri => $"https://github.com/azure/azure-iot-connected-factory-cfstation.git";
-
-        public static ushort ServerPort
-        {
-            get => _serverPort;
-            set => _serverPort = value;
-        }
-
-        public static string ServerPath
-        {
-            get => _serverPath;
-            set => _serverPath = value;
-        }
-
-        public static bool TrustMyself
-        {
-            get => _trustMyself;
-            set => _trustMyself = value;
-        }
-
-        // Enable Utils.TraceMasks.OperationDetail to get output for IoTHub telemetry operations. Current: 0x287 (647), with OperationDetail: 0x2C7 (711)
-        public static int OpcStackTraceMask
-        {
-            get => _opcStackTraceMask;
-            set => _opcStackTraceMask = value;
-        }
-
-        public static string ServerSecurityPolicy
-        {
-            get => _serverSecurityPolicy;
-            set => _serverSecurityPolicy = value;
-        }
-
-        public static string OpcOwnCertStoreType
-        {
-            get => _opcOwnCertStoreType;
-            set => _opcOwnCertStoreType = value;
-        }
-
-        public static string OpcOwnCertDirectoryStorePathDefault => "CertificateStores/own";
-        public static string OpcOwnCertX509StorePathDefault => "CurrentUser\\UA_MachineDefault";
-        public static string OpcOwnCertStorePath
-        {
-            get => _opcOwnCertStorePath;
-            set => _opcOwnCertStorePath = value;
-        }
-
-        public static string OpcTrustedCertStoreType
-        {
-            get => _opcTrustedCertStoreType;
-            set => _opcTrustedCertStoreType = value;
-        }
-
-        public static string OpcTrustedCertDirectoryStorePathDefault => "CertificateStores/trusted";
-        public static string OpcTrustedCertX509StorePathDefault => "CurrentUser\\UA_MachineDefault";
-        public static string OpcTrustedCertStorePath
-        {
-            get => _opcTrustedCertStorePath;
-            set => _opcTrustedCertStorePath = value;
-        }
-
-        public static string OpcRejectedCertStoreType
-        {
-            get => _opcRejectedCertStoreType;
-            set => _opcRejectedCertStoreType = value;
-        }
-
-        public static string OpcRejectedCertDirectoryStorePathDefault => "CertificateStores/rejected";
-        public static string OpcRejectedCertX509StorePathDefault => "CurrentUser\\UA_MachineDefault";
-        public static string OpcRejectedCertStorePath
-        {
-            get => _opcRejectedCertStorePath;
-            set => _opcRejectedCertStorePath = value;
-        }
-
-        public static string OpcIssuerCertStoreType
-        {
-            get => _opcIssuerCertStoreType;
-            set => _opcIssuerCertStoreType = value;
-        }
-
-        public static string OpcIssuerCertDirectoryStorePathDefault => "CertificateStores/issuers";
-        public static string OpcIssuerCertX509StorePathDefault => "CurrentUser\\UA_MachineDefault";
-        public static string OpcIssuerCertStorePath
-        {
-            get => _opcIssuerCertStorePath;
-            set => _opcIssuerCertStorePath = value;
-        }
-
-        public static int LdsRegistrationInterval
-        {
-            get => _ldsRegistrationInterval;
-            set => _ldsRegistrationInterval = value;
-        }
-
-        public static bool AutoAcceptCerts
-        {
-            get => _autoAcceptCerts;
-            set => _autoAcceptCerts = value;
-        }
-
-        public static int OpcTraceToLoggerVerbose = 0;
-        public static int OpcTraceToLoggerDebug = 0;
-        public static int OpcTraceToLoggerInformation = 0;
-        public static int OpcTraceToLoggerWarning = 0;
-        public static int OpcTraceToLoggerError = 0;
-        public static int OpcTraceToLoggerFatal = 0;
+        public static string ApplicationName { get; set; } = "cfstation";
+        public static string ApplicationUri => $"urn:{Hostname}:{ApplicationName}:microsoft:";
+        public static string ProductUri => "https://github.com/azure/azure-iot-connected-factory-cfstation.git";
+        public static ushort ServerPort { get; set; } = 51210;
+        public static string ServerPath { get; set; } = "/UA/cfstation";
 
         /// <summary>
-        /// Configures all OPC stack settings
+        /// Default endpoint security of the application.
+        /// </summary>
+        public static string ServerSecurityPolicy { get; set; } = SecurityPolicies.Basic128Rsa15;
+
+        /// <summary>
+        /// Enables unsecure endpoint access to the application.
+        /// </summary>
+        public static bool EnableUnsecureTransport { get; set; } = false;
+
+        /// <summary>
+        /// Sets the LDS registration interval.
+        /// </summary>
+        public static int LdsRegistrationInterval { get; set; } = 0;
+
+        /// <summary>
+        /// Set the max string length the OPC stack supports.
+        /// </summary>
+        public static int OpcMaxStringLength { get; set; } = 128*1024;
+
+        /// <summary>
+        /// <summary>
+        /// Mapping of the application logging levels to OPC stack logging levels.
+        /// </summary>
+        public static int OpcTraceToLoggerVerbose { get; set; } = 0;
+        public static int OpcTraceToLoggerDebug { get; set; } = 0;
+        public static int OpcTraceToLoggerInformation { get; set; } = 0;
+        public static int OpcTraceToLoggerWarning { get; set; } = 0;
+        public static int OpcTraceToLoggerError { get; set; } = 0;
+        public static int OpcTraceToLoggerFatal { get; set; } = 0;
+
+        /// <summary>
+        /// Set the OPC stack log level.
+        /// </summary>
+        public static int OpcStackTraceMask { get; set; } = Utils.TraceMasks.Error | Utils.TraceMasks.Security | Utils.TraceMasks.StackTrace | Utils.TraceMasks.StartStop;
+
+        /// <summary>
+        /// Timeout for OPC operations.
+        /// </summary>
+        public static int OpcOperationTimeout { get; set; } = 120000;
+
+        public static uint OpcSessionCreationTimeout { get; set; } = 10;
+
+        public static uint OpcSessionCreationBackoffMax { get; set; } = 5;
+
+        public static uint OpcKeepAliveDisconnectThreshold { get; set; } = 5;
+
+        public static int OpcKeepAliveIntervalInSec { get; set; } = 2;
+
+        public const int OpcSamplingIntervalDefault = 1000;
+
+        public static int OpcSamplingInterval { get; set; } = OpcSamplingIntervalDefault;
+
+        public const int OpcPublishingIntervalDefault = 0;
+
+        public static int OpcPublishingInterval { get; set; } = OpcPublishingIntervalDefault;
+
+        public static string PublisherServerSecurityPolicy { get; set; } = SecurityPolicies.Basic128Rsa15;
+
+        /// <summary>
+        /// Ctor of the OPC application configuration.
+        /// </summary>
+        public OpcApplicationConfiguration()
+        {
+        }
+
+        /// <summary>
+        /// Configures all OPC stack settings.
         /// </summary>
         public async Task<ApplicationConfiguration> ConfigureAsync()
         {
-            // Instead of using a Config.xml we configure everything programmatically.
+            // instead of using a configuration XML file, we configure everything programmatically
 
-            //
-            // OPC UA Application configuration
-            //
-            _configuration = new ApplicationConfiguration();
+            // passed in as command line argument
+            ApplicationConfiguration = new ApplicationConfiguration();
+            ApplicationConfiguration.ApplicationName = ApplicationName;
+            ApplicationConfiguration.ApplicationUri = ApplicationUri;
+            ApplicationConfiguration.ProductUri = ProductUri;
+            ApplicationConfiguration.ApplicationType = ApplicationType.ClientAndServer;
 
-            // Passed in as command line argument
-            _configuration.ApplicationName = ApplicationName;
-            _configuration.ApplicationUri = ApplicationUri;
-            _configuration.ProductUri = ProductUri;
-            _configuration.ApplicationType = ApplicationType.Server;
+            // configure OPC stack tracing
+            ApplicationConfiguration.TraceConfiguration = new TraceConfiguration();
+            ApplicationConfiguration.TraceConfiguration.TraceMasks = OpcStackTraceMask;
+            ApplicationConfiguration.TraceConfiguration.ApplySettings();
+            Utils.Tracing.TraceEventHandler += LoggerOpcUaTraceHandler;
+            Logger.Information($"opcstacktracemask set to: 0x{OpcStackTraceMask:X}");
 
-            //
-            // TraceConfiguration
-            //
-            _configuration.TraceConfiguration = new TraceConfiguration();
-            _configuration.TraceConfiguration.TraceMasks = _opcStackTraceMask;
-            _configuration.TraceConfiguration.ApplySettings();
-            Utils.Tracing.TraceEventHandler += new EventHandler<TraceEventArgs>(LoggerOpcUaTraceHandler);
-            Logger.Information($"opcstacktracemask set to: 0x{_opcStackTraceMask:X}");
+            // configure transport settings
+            ApplicationConfiguration.TransportQuotas = new TransportQuotas();
+            ApplicationConfiguration.TransportQuotas.MaxStringLength = OpcMaxStringLength;
+            ApplicationConfiguration.TransportQuotas.MaxMessageSize = 4 * 1024 * 1024;
 
-            //
-            // Security configuration
-            //
-            _configuration.SecurityConfiguration = new SecurityConfiguration();
+            // the OperationTimeout should be twice the minimum value for PublishingInterval * KeepAliveCount, so set to 120s
+            ApplicationConfiguration.TransportQuotas.OperationTimeout = OpcOperationTimeout;
+            Logger.Information($"OperationTimeout set to {ApplicationConfiguration.TransportQuotas.OperationTimeout}");
 
-            // TrustedIssuerCertificates
-            _configuration.SecurityConfiguration.TrustedIssuerCertificates = new CertificateTrustList();
-            _configuration.SecurityConfiguration.TrustedIssuerCertificates.StoreType = _opcIssuerCertStoreType;
-            _configuration.SecurityConfiguration.TrustedIssuerCertificates.StorePath = _opcIssuerCertStorePath;
-            Logger.Information($"Trusted Issuer store type is: {_configuration.SecurityConfiguration.TrustedIssuerCertificates.StoreType}");
-            Logger.Information($"Trusted Issuer Certificate store path is: {_configuration.SecurityConfiguration.TrustedIssuerCertificates.StorePath}");
+            // configure OPC UA server
+            ApplicationConfiguration.ServerConfiguration = new ServerConfiguration();
 
-            // TrustedPeerCertificates
-            _configuration.SecurityConfiguration.TrustedPeerCertificates = new CertificateTrustList();
-            _configuration.SecurityConfiguration.TrustedPeerCertificates.StoreType = _opcTrustedCertStoreType;
-            if (string.IsNullOrEmpty(_opcTrustedCertStorePath))
+            // configure server base addresses
+            if (ApplicationConfiguration.ServerConfiguration.BaseAddresses.Count == 0)
             {
-                // Set default.
-                _configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath = _opcTrustedCertStoreType == X509Store ? OpcTrustedCertX509StorePathDefault : OpcTrustedCertDirectoryStorePathDefault;
-                if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("_TPC_SP")))
-                {
-                    // Use environment variable.
-                    _configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath = Environment.GetEnvironmentVariable("_TPC_SP");
-                }
+                // we do not use the localhost replacement mechanism of the configuration loading, to immediately show the base address here
+                ApplicationConfiguration.ServerConfiguration.BaseAddresses.Add($"opc.tcp://{Hostname}:{ServerPort}{ServerPath}");
             }
-            else
-            {
-                _configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath = _opcTrustedCertStorePath;
-            }
-            Logger.Information($"Trusted Peer Certificate store type is: {_configuration.SecurityConfiguration.TrustedPeerCertificates.StoreType}");
-            Logger.Information($"Trusted Peer Certificate store path is: {_configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath}");
-
-            // RejectedCertificateStore
-            _configuration.SecurityConfiguration.RejectedCertificateStore = new CertificateTrustList();
-            _configuration.SecurityConfiguration.RejectedCertificateStore.StoreType = _opcRejectedCertStoreType;
-            _configuration.SecurityConfiguration.RejectedCertificateStore.StorePath = _opcRejectedCertStorePath;
-
-            Logger.Information($"Rejected certificate store type is: {_configuration.SecurityConfiguration.RejectedCertificateStore.StoreType}");
-            Logger.Information($"Rejected Certificate store path is: {_configuration.SecurityConfiguration.RejectedCertificateStore.StorePath}");
-
-            // AutoAcceptUntrustedCertificates
-            // This is a security risk and should be set to true only for debugging purposes.
-            _configuration.SecurityConfiguration.AutoAcceptUntrustedCertificates = false;
-
-            // AddAppCertToTrustStore: this does only work on Application objects, here for completeness
-            _configuration.SecurityConfiguration.AddAppCertToTrustedStore = TrustMyself;
-
-            // RejectSHA1SignedCertificates
-            // We allow SHA1 certificates for now as many OPC Servers still use them
-            _configuration.SecurityConfiguration.RejectSHA1SignedCertificates = false;
-            Logger.Information($"Rejection of SHA1 signed certificates is {(_configuration.SecurityConfiguration.RejectSHA1SignedCertificates ? "enabled" : "disabled")}");
-
-            // MinimunCertificatesKeySize
-            // We allow a minimum key size of 1024 bit, as many OPC UA servers still use them
-            _configuration.SecurityConfiguration.MinimumCertificateKeySize = 1024;
-            Logger.Information($"Minimum certificate key size set to {_configuration.SecurityConfiguration.MinimumCertificateKeySize}");
-
-            // Application certificate
-            _configuration.SecurityConfiguration.ApplicationCertificate = new CertificateIdentifier();
-            _configuration.SecurityConfiguration.ApplicationCertificate.StoreType = _opcOwnCertStoreType;
-            _configuration.SecurityConfiguration.ApplicationCertificate.StorePath = _opcOwnCertStorePath;
-            _configuration.SecurityConfiguration.ApplicationCertificate.SubjectName = _configuration.ApplicationName;
-            Logger.Information($"Application Certificate store type is: {_configuration.SecurityConfiguration.ApplicationCertificate.StoreType}");
-            Logger.Information($"Application Certificate store path is: {_configuration.SecurityConfiguration.ApplicationCertificate.StorePath}");
-            Logger.Information($"Application Certificate subject name is: {_configuration.SecurityConfiguration.ApplicationCertificate.SubjectName}");
-
-            // handle cert validation
-            if (_autoAcceptCerts)
-            {
-                Logger.Warning("WARNING: Automatically accepting certificates. This is a security risk.");
-                _configuration.SecurityConfiguration.AutoAcceptUntrustedCertificates = true;
-            }
-            _configuration.CertificateValidator = new Opc.Ua.CertificateValidator();
-            _configuration.CertificateValidator.CertificateValidation += new Opc.Ua.CertificateValidationEventHandler(CertificateValidator_CertificateValidation);
-
-            //// update security information
-            await _configuration.CertificateValidator.Update(_configuration.SecurityConfiguration);
-
-            // Use existing certificate, if it is there.
-            X509Certificate2 certificate = await _configuration.SecurityConfiguration.ApplicationCertificate.Find(true);
-            if (certificate == null)
-            {
-                Logger.Information($"No existing Application certificate found. Create a self-signed Application certificate valid from yesterday for {CertificateFactory.defaultLifeTime} months,");
-                Logger.Information($"with a {CertificateFactory.defaultKeySize} bit key and {CertificateFactory.defaultHashSize} bit hash.");
-                certificate = CertificateFactory.CreateCertificate(
-                    _configuration.SecurityConfiguration.ApplicationCertificate.StoreType,
-                    _configuration.SecurityConfiguration.ApplicationCertificate.StorePath,
-                    null,
-                    _configuration.ApplicationUri,
-                    _configuration.ApplicationName,
-                    _configuration.ApplicationName,
-                    null,
-                    CertificateFactory.defaultKeySize,
-                    DateTime.UtcNow - TimeSpan.FromDays(1),
-                    CertificateFactory.defaultLifeTime,
-                    CertificateFactory.defaultHashSize,
-                    false,
-                    null,
-                    null
-                    );
-                _configuration.SecurityConfiguration.ApplicationCertificate.Certificate = certificate ?? throw new Exception("OPC UA application certificate can not be created! Cannot continue without it!");
-            }
-            else
-            {
-                Logger.Information("Application certificate found in Application Certificate Store");
-            }
-            _configuration.ApplicationUri = Utils.GetApplicationUriFromCertificate(certificate);
-            Logger.Information($"Application certificate is for Application URI '{_configuration.ApplicationUri}', Application '{_configuration.ApplicationName} and has Subject '{_configuration.ApplicationName}'");
-
-            // We make the default reference stack behavior configurable to put our own certificate into the trusted peer store.
-            // Note: SecurityConfiguration.AddAppCertToTrustedStore only works for Application instance objects, which we do not have.
-            if (_trustMyself)
-            {
-                // Ensure it is trusted
-                try
-                {
-                    ICertificateStore store = _configuration.SecurityConfiguration.TrustedPeerCertificates.OpenStore();
-                    if (store == null)
-                    {
-                        Logger.Warning($"Can not open trusted peer store. StorePath={_configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath}");
-                    }
-                    else
-                    {
-                        try
-                        {
-                            Logger.Information($"Adding server certificate to trusted peer store. StorePath={_configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath}");
-                            X509Certificate2 publicKey = new X509Certificate2(certificate.RawData);
-                            await store.Add(publicKey);
-                        }
-                        finally
-                        {
-                            store.Close();
-                        }
-                    }
-                }
-                catch (Exception e)
-                {
-                    Logger.Fatal(e, $"Can not add server certificate to trusted peer store. StorePath={_configuration.SecurityConfiguration.TrustedPeerCertificates.StorePath})");
-                }
-            }
-            else
-            {
-                Logger.Warning("Server certificate is not added to trusted peer store.");
-            }
-
-            //
-            // TransportConfigurations
-            //
-            _configuration.TransportQuotas = new TransportQuotas();
-
-            //
-            // ServerConfiguration
-            //
-            _configuration.ServerConfiguration = new ServerConfiguration();
-
-            // BaseAddresses
-            if (_configuration.ServerConfiguration.BaseAddresses.Count == 0)
-            {
-                // We do not use the localhost replacement mechanism of the configuration loading, to immediately show the base address here
-                _configuration.ServerConfiguration.BaseAddresses.Add($"opc.tcp://{StationHostname}:{_serverPort}{_serverPath}");
-            }
-            foreach (var endpoint in _configuration.ServerConfiguration.BaseAddresses)
+            foreach (var endpoint in ApplicationConfiguration.ServerConfiguration.BaseAddresses)
             {
                 Logger.Information($"OPC UA server base address: {endpoint}");
             }
 
-            // SecurityPolicies
-            // We do not allow security policy SecurityPolicies.None, but always high security
+            // by default use high secure transport
             ServerSecurityPolicy newPolicy = new ServerSecurityPolicy()
             {
                 SecurityMode = MessageSecurityMode.SignAndEncrypt,
                 SecurityPolicyUri = SecurityPolicies.Basic256Sha256
             };
-            _configuration.ServerConfiguration.SecurityPolicies.Add(newPolicy);
+            ApplicationConfiguration.ServerConfiguration.SecurityPolicies.Add(newPolicy);
             Logger.Information($"Security policy {newPolicy.SecurityPolicyUri} with mode {newPolicy.SecurityMode} added");
 
-            // MaxRegistrationInterval
-            _configuration.ServerConfiguration.MaxRegistrationInterval = _ldsRegistrationInterval;
-            Logger.Information($"LDS(-ME) registration intervall set to {_ldsRegistrationInterval} ms (0 means no registration)");
-
-            // UserTokenPolicies
-            _configuration.ServerConfiguration.UserTokenPolicies.Add(new UserTokenPolicy() { TokenType = UserTokenType.Anonymous });
-            _configuration.ServerConfiguration.UserTokenPolicies.Add(new UserTokenPolicy() { TokenType = UserTokenType.UserName });
-
-            Logger.Information($"Security policy {newPolicy.SecurityPolicyUri} with mode {newPolicy.SecurityMode} added");
-
-            // validate the configuration now
-            await _configuration.Validate(_configuration.ApplicationType);
-            return _configuration;
-        }
-
-        /// <summary>
-        /// Event handler to validate certificates.
-        /// </summary>
-        private static void CertificateValidator_CertificateValidation(Opc.Ua.CertificateValidator validator, Opc.Ua.CertificateValidationEventArgs e)
-        {
-            if (e.Error.StatusCode == Opc.Ua.StatusCodes.BadCertificateUntrusted)
+            // add none secure transport on request
+            if (EnableUnsecureTransport)
             {
-                e.Accept = _autoAcceptCerts;
-                if (_autoAcceptCerts)
+                newPolicy = new ServerSecurityPolicy()
                 {
-                    Logger.Information($"Accepting Certificate: {e.Certificate.Subject}");
-                }
-                else
-                {
-                    Logger.Information($"Rejecting Certificate: {e.Certificate.Subject}");
-                }
+                    SecurityMode = MessageSecurityMode.None,
+                    SecurityPolicyUri = SecurityPolicies.None
+                };
+                ApplicationConfiguration.ServerConfiguration.SecurityPolicies.Add(newPolicy);
+                Logger.Information($"Unsecure security policy {newPolicy.SecurityPolicyUri} with mode {newPolicy.SecurityMode} added");
+                Logger.Warning("Note: This is a security risk and needs to be disabled for production use");
             }
+
+            // add default client configuration
+            ApplicationConfiguration.ClientConfiguration = new ClientConfiguration();
+
+            // security configuration
+            await InitApplicationSecurityAsync().ConfigureAwait(false);
+
+            // set LDS registration interval
+            ApplicationConfiguration.ServerConfiguration.MaxRegistrationInterval = LdsRegistrationInterval;
+            Logger.Information($"LDS(-ME) registration intervall set to {LdsRegistrationInterval} ms (0 means no registration)");
+
+            // show certificate store information
+            await ShowCertificateStoreInformationAsync().ConfigureAwait(false);
+
+            return ApplicationConfiguration;
         }
 
         /// <summary>
@@ -375,16 +184,14 @@ namespace CfStation
         private static void LoggerOpcUaTraceHandler(object sender, TraceEventArgs e)
         {
             // return fast if no trace needed
-            if ((e.TraceMask & _opcStackTraceMask) == 0)
+            if ((e.TraceMask & OpcStackTraceMask) == 0)
             {
                 return;
             }
-
             // e.Exception and e.Message are always null
 
             // format the trace message
-            string message = string.Empty;
-            message = string.Format(e.Format, e.Arguments).Trim();
+            string message = string.Format(CultureInfo.InvariantCulture, e.Format, e.Arguments).Trim();
             message = "OPC: " + message;
 
             // map logging level
@@ -421,23 +228,8 @@ namespace CfStation
             return;
         }
 
-        private static string _stationHostname = $"{Utils.GetHostName().ToLowerInvariant()}";
-        private static ushort _serverPort = 51210;
-        private static string _serverPath = string.Empty;
-        private static bool _trustMyself = false;
-        private static int _opcStackTraceMask = 0;
-
-        private static string _serverSecurityPolicy = SecurityPolicies.Basic256Sha256;
-        private static string _opcOwnCertStoreType = X509Store;
-        private static string _opcOwnCertStorePath = OpcOwnCertX509StorePathDefault;
-        private static string _opcTrustedCertStoreType = Directory;
-        private static string _opcTrustedCertStorePath = OpcTrustedCertDirectoryStorePathDefault;
-        private static string _opcRejectedCertStoreType = Directory;
-        private static string _opcRejectedCertStorePath = OpcRejectedCertDirectoryStorePathDefault;
-        private static string _opcIssuerCertStoreType = Directory;
-        private static string _opcIssuerCertStorePath = OpcIssuerCertDirectoryStorePathDefault;
-        private static int _ldsRegistrationInterval = 0;
-        private static ApplicationConfiguration _configuration;
-        private static bool _autoAcceptCerts = false;
+#pragma warning disable CA1308 // Normalize strings to uppercase
+        private static string _hostname = $"{Utils.GetHostName().ToLowerInvariant()}";
+#pragma warning restore CA1308 // Normalize strings to uppercase
     }
 }

@@ -8,9 +8,11 @@ namespace CfStation
     using Opc.Ua;
     using Serilog;
     using System.Collections.Generic;
-    using System.Globalization;
+    using System.IO;
+    using System.Linq;
     using System.Reflection;
     using System.Text;
+    using static Opc.Ua.CertificateStoreType;
     using static OpcApplicationConfiguration;
     using static StationNodeManager;
 
@@ -37,7 +39,7 @@ namespace CfStation
             Mono.Options.OptionSet options = new Mono.Options.OptionSet {
                 // opc server configuration options
                 { "lf|logfile=", $"the filename of the logfile to use.\nDefault: '{_logFileName}'", (string l) => _logFileName = l },
-                { "ll|loglevel=", $"the loglevel to use (allowed: fatal, error, warn, info, debug, verbose).\nDefault: info", (string l) => {
+                { "ll|loglevel=", "the loglevel to use (allowed: fatal, error, warn, info, debug, verbose).\nDefault: info", (string l) => {
                         List<string> logLevels = new List<string> {"fatal", "error", "warn", "info", "debug", "verbose"};
                         if (logLevels.Contains(l.ToLowerInvariant()))
                         {
@@ -51,7 +53,7 @@ namespace CfStation
                 },
                 { "pn|portnum=", $"the server port of the OPC server endpoint.\nDefault: {ServerPort}", (ushort p) => ServerPort = p },
                 { "op|path=", $"the enpoint URL path part of the OPC server endpoint.\nDefault: '{ServerPath}'", (string a) => ServerPath = a },
-                { "sh|stationhostname=", $"the fullqualified hostname of the station.\nDefault: {StationHostname}", (string a) => StationHostname = a },
+                { "sh|stationhostname=", $"the fullqualified hostname of the station.\nDefault: {Hostname}", (string a) => Hostname = a },
                 { "ga|generatealerts", $"the station should generate alerts.\nDefault: {GenerateAlerts}", g => GenerateAlerts = g != null},
                 { "pc|powerconsumption=", $"the stations average power consumption in kW\nDefault:  {PowerConsumption} kW", (double d) => PowerConsumption = d },
                 { "ct|cycletime=", $"the stations cycle time in seconds\nDefault:  {IdealCycleTimeDefault} sec", (ulong ul) => IdealCycleTimeDefault = ul * 1000 },
@@ -70,16 +72,91 @@ namespace CfStation
 
                 { "to|trustowncert", $"the cfstation certificate is put into the trusted certificate store automatically.\nDefault: {TrustMyself}", t => TrustMyself = t != null },
 
-                { "ap|appcertstorepath=", $"the path where the own application cert should be stored\nDefault '{OpcOwnCertX509StorePathDefault}'", (string s) => OpcOwnCertStorePath = s
+                // cert store options
+                { "at|appcertstoretype=", $"the own application cert store type. \n(allowed values: Directory, X509Store)\nDefault: '{OpcOwnCertStoreType}'", (string s) => {
+                        if (s.Equals(X509Store, StringComparison.OrdinalIgnoreCase) || s.Equals(CertificateStoreType.Directory, StringComparison.OrdinalIgnoreCase))
+                        {
+                            OpcOwnCertStoreType = s.Equals(X509Store, StringComparison.OrdinalIgnoreCase) ? X509Store : CertificateStoreType.Directory;
+                            OpcOwnCertStorePath = s.Equals(X509Store, StringComparison.OrdinalIgnoreCase) ? OpcOwnCertX509StorePathDefault : OpcOwnCertDirectoryStorePathDefault;
+                        }
+                        else
+                        {
+                            throw new OptionException();
+                        }
+                    }
+                },
+                { "ap|appcertstorepath=", "the path where the own application cert should be stored\nDefault (depends on store type):\n" +
+                        $"X509Store: '{OpcOwnCertX509StorePathDefault}'\n" +
+                        $"Directory: '{OpcOwnCertDirectoryStorePathDefault}'", (string s) => OpcOwnCertStorePath = s
                 },
 
-                { "tp|trustedcertstorepath=", $"the path of the trusted cert store\nDefault '{OpcTrustedCertDirectoryStorePathDefault}'", (string s) => OpcTrustedCertStorePath = s
+                { "tp|trustedcertstorepath=", $"the path of the trusted cert store\nDefault: '{OpcTrustedCertDirectoryStorePathDefault}'", (string s) => OpcTrustedCertStorePath = s },
+
+                { "rp|rejectedcertstorepath=", $"the path of the rejected cert store\nDefault '{OpcRejectedCertDirectoryStorePathDefault}'", (string s) => OpcRejectedCertStorePath = s },
+
+                { "ip|issuercertstorepath=", $"the path of the trusted issuer cert store\nDefault '{OpcIssuerCertDirectoryStorePathDefault}'", (string s) => OpcIssuerCertStorePath = s },
+
+                { "csr", $"show data to create a certificate signing request\nDefault '{ShowCreateSigningRequestInfo}'", c => ShowCreateSigningRequestInfo = c != null },
+
+                { "ab|applicationcertbase64=", "update/set this applications certificate with the certificate passed in as bas64 string", (string s) => NewCertificateBase64String = s
+                },
+                { "af|applicationcertfile=", "update/set this applications certificate with the certificate file specified", (string s) =>
+                    {
+                        if (File.Exists(s))
+                        {
+                            NewCertificateFileName = s;
+                        }
+                        else
+                        {
+                            throw new OptionException("The file '{s}' does not exist.", "applicationcertfile");
+                        }
+                    }
                 },
 
-                { "rp|rejectedcertstorepath=", $"the path of the rejected cert store\nDefault '{OpcRejectedCertDirectoryStorePathDefault}'", (string s) => OpcRejectedCertStorePath = s
+                { "pb|privatekeybase64=", "initial provisioning of the application certificate (with a PEM or PFX fomat) requires a private key passed in as base64 string", (string s) => PrivateKeyBase64String = s
+                },
+                { "pk|privatekeyfile=", "initial provisioning of the application certificate (with a PEM or PFX fomat) requires a private key passed in as file", (string s) =>
+                    {
+                        if (File.Exists(s))
+                        {
+                            PrivateKeyFileName = s;
+                        }
+                        else
+                        {
+                            throw new OptionException("The file '{s}' does not exist.", "privatekeyfile");
+                        }
+                    }
                 },
 
-                { "ip|issuercertstorepath=", $"the path of the trusted issuer cert store\nDefault '{OpcIssuerCertDirectoryStorePathDefault}'", (string s) => OpcIssuerCertStorePath = s
+                { "cp|certpassword=", "the optional password for the PEM or PFX or the installed application certificate", (string s) => CertificatePassword = s
+                },
+
+                { "tb|addtrustedcertbase64=", "adds the certificate to the applications trusted cert store passed in as base64 string (multiple strings supported)", (string s) => TrustedCertificateBase64Strings.AddRange(ParseListOfStrings(s))
+                },
+                { "tf|addtrustedcertfile=", "adds the certificate file(s) to the applications trusted cert store passed in as base64 string (multiple filenames supported)", (string s) => TrustedCertificateFileNames.AddRange(ParseListOfFileNames(s, "addtrustedcertfile"))
+                },
+
+                { "ib|addissuercertbase64=", "adds the specified issuer certificate to the applications trusted issuer cert store passed in as base64 string (multiple strings supported)", (string s) => IssuerCertificateBase64Strings.AddRange(ParseListOfStrings(s))
+                },
+                { "if|addissuercertfile=", "adds the specified issuer certificate file(s) to the applications trusted issuer cert store (multiple filenames supported)", (string s) => IssuerCertificateFileNames.AddRange(ParseListOfFileNames(s, "addissuercertfile"))
+                },
+
+                { "rb|updatecrlbase64=", "update the CRL passed in as base64 string to the corresponding cert store (trusted or trusted issuer)", (string s) => CrlBase64String = s
+                },
+                { "uc|updatecrlfile=", "update the CRL passed in as file to the corresponding cert store (trusted or trusted issuer)", (string s) =>
+                    {
+                        if (File.Exists(s))
+                        {
+                            CrlFileName = s;
+                        }
+                        else
+                        {
+                            throw new OptionException("The file '{s}' does not exist.", "updatecrlfile");
+                        }
+                    }
+                },
+
+                { "rc|removecert=", "remove cert(s) with the given thumbprint(s) (multiple thumbprints supported)", (string s) => ThumbprintsToRemove.AddRange(ParseListOfStrings(s))
                 },
 
                 // misc
@@ -117,7 +194,7 @@ namespace CfStation
 
             try
             {
-                await ConsoleServerAsync(args);
+                await ConsoleServerAsync(args).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -132,7 +209,7 @@ namespace CfStation
 
             // init OPC configuration and tracing
             OpcApplicationConfiguration stationOpcApplicationConfiguration = new OpcApplicationConfiguration();
-            Opc.Ua.ApplicationConfiguration stationApplicationConfiguration = await stationOpcApplicationConfiguration.ConfigureAsync();
+            Opc.Ua.ApplicationConfiguration stationApplicationConfiguration = await stationOpcApplicationConfiguration.ConfigureAsync().ConfigureAwait(false);
 
             // allow canceling the connection process
             try
@@ -148,8 +225,8 @@ namespace CfStation
             }
 
             // start the server.
-            Logger.Information($"Starting server on endpoint {stationApplicationConfiguration.ServerConfiguration.BaseAddresses[0].ToString()} ...");
-            Logger.Information($"Server simulation settings are:");
+            Logger.Information($"Starting server on endpoint {stationApplicationConfiguration.ServerConfiguration.BaseAddresses[0]} ...");
+            Logger.Information("Server simulation settings are:");
             Logger.Information($"Ideal cycle time of this station is {IdealCycleTimeDefault} msec");
             Logger.Information($"Power consumption when operating at ideal cycle time is {PowerConsumption} kW");
             Logger.Information($"{(GenerateAlerts ? "Periodically " : "Not ")}generating high pressure for alert simulation.");
@@ -166,7 +243,6 @@ namespace CfStation
         /// </summary>
         private static void Usage(Mono.Options.OptionSet options)
         {
-
             // show usage
             Logger.Information("");
             Logger.Information("Usage: {0}.exe [<options>]", Assembly.GetEntryAssembly().GetName().Name);
@@ -216,7 +292,7 @@ namespace CfStation
                     break;
                 case "debug":
                     loggerConfiguration.MinimumLevel.Debug();
-                    OpcStackTraceMask = OpcTraceToLoggerDebug = Utils.TraceMasks.StackTrace | Utils.TraceMasks.Operation | 
+                    OpcStackTraceMask = OpcTraceToLoggerDebug = Utils.TraceMasks.StackTrace | Utils.TraceMasks.Operation |
                         Utils.TraceMasks.StartStop | Utils.TraceMasks.ExternalSystem | Utils.TraceMasks.Security;
                     break;
                 case "verbose":
@@ -246,6 +322,92 @@ namespace CfStation
             Logger.Information($"Log file is: {System.IO.Path.GetFullPath(_logFileName)}");
             Logger.Information($"Log level is: {_logLevel}");
             return;
+        }
+
+        /// <summary>
+        /// Helper to build a list of strings out of a comma separated list of strings (optional in double quotes).
+        /// </summary>
+        public static List<string> ParseListOfStrings(string s)
+        {
+            List<string> strings = new List<string>();
+            if (s[0] == '"' && (s.Count(c => c.Equals('"')) % 2 == 0))
+            {
+                while (s.Contains('"', StringComparison.InvariantCulture))
+                {
+                    int first = 0;
+                    int next = 0;
+                    first = s.IndexOf('"', next);
+                    next = s.IndexOf('"', ++first);
+                    strings.Add(s[first..next]);
+                    s = s.Substring(++next);
+                }
+            }
+            else if (s.Contains(',', StringComparison.InvariantCulture))
+            {
+                strings = s.Split(',').ToList();
+                strings = strings.Select(st => st.Trim()).ToList();
+            }
+            else
+            {
+                strings.Add(s);
+            }
+            return strings;
+        }
+
+        /// <summary>
+        /// Helper to build a list of filenames out of a comma separated list of filenames (optional in double quotes).
+        /// </summary>
+        private static List<string> ParseListOfFileNames(string s, string option)
+        {
+            List<string> fileNames = new List<string>();
+            if (s[0] == '"' && (s.Count(c => c.Equals('"')) % 2 == 0))
+            {
+                while (s.Contains('"', StringComparison.InvariantCulture))
+                {
+                    int first = 0;
+                    int next = 0;
+                    first = s.IndexOf('"', next);
+                    next = s.IndexOf('"', ++first);
+                    var fileName = s[first..next];
+                    if (File.Exists(fileName))
+                    {
+                        fileNames.Add(fileName);
+                    }
+                    else
+                    {
+                        throw new OptionException($"The file '{fileName}' does not exist.", option);
+                    }
+                    s = s.Substring(++next);
+                }
+            }
+            else if (s.Contains(',', StringComparison.InvariantCulture))
+            {
+                List<string> parsedFileNames = s.Split(',').ToList();
+                parsedFileNames = parsedFileNames.Select(st => st.Trim()).ToList();
+                foreach (var fileName in parsedFileNames)
+                {
+                    if (File.Exists(fileName))
+                    {
+                        fileNames.Add(fileName);
+                    }
+                    else
+                    {
+                        throw new OptionException($"The file '{fileName}' does not exist.", option);
+                    }
+                }
+            }
+            else
+            {
+                if (File.Exists(s))
+                {
+                    fileNames.Add(s);
+                }
+                else
+                {
+                    throw new OptionException($"The file '{s}' does not exist.", option);
+                }
+            }
+            return fileNames;
         }
 
         private static string _logFileName = $"{System.Net.Dns.GetHostName().Split('.')[0].ToLowerInvariant()}-station.log";
