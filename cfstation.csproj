@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <DebugType>portable</DebugType>
     <AssemblyName>CfStation</AssemblyName>
     <OutputType>Exe</OutputType>
@@ -9,7 +9,7 @@
     <Company>Microsoft</Company>
     <Product>Connectedfactory</Product>
     <Description>Connectedfactory station</Description>
-    <Copyright>Copyright © 2004-2018 Microsoft Corp</Copyright>
+    <Copyright>Copyright © 2004-2020 Microsoft Corp</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,11 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Mono.Options" Version="5.3.0.1" />
-    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.3.352.12" />
-    <PackageReference Include="Serilog.Extensions.Logging" Version="2.0.2" />
+    <PackageReference Include="Mono.Options" Version="6.6.0.161" />
+    <PackageReference Include="OPCFoundation.NetStandard.Opc.Ua" Version="1.4.361.39" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="3.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="4.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="4.1.0" />
   </ItemGroup>
 
 </Project>
