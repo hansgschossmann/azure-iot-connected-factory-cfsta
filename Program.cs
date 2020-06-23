@@ -53,7 +53,6 @@ namespace CfStation
                 },
                 { "pn|portnum=", $"the server port of the OPC server endpoint.\nDefault: {ServerPort}", (ushort p) => ServerPort = p },
                 { "op|path=", $"the enpoint URL path part of the OPC server endpoint.\nDefault: '{ServerPath}'", (string a) => ServerPath = a },
-                { "sh|stationhostname=", $"the fullqualified hostname of the station.\nDefault: {Hostname}", (string a) => Hostname = a },
                 { "ga|generatealerts", $"the station should generate alerts.\nDefault: {GenerateAlerts}", g => GenerateAlerts = g != null},
                 { "pc|powerconsumption=", $"the stations average power consumption in kW\nDefault:  {PowerConsumption} kW", (double d) => PowerConsumption = d },
                 { "ct|cycletime=", $"the stations cycle time in seconds\nDefault:  {IdealCycleTimeDefault} sec", (ulong ul) => IdealCycleTimeDefault = ul * 1000 },
@@ -209,7 +208,7 @@ namespace CfStation
 
             // init OPC configuration and tracing
             OpcApplicationConfiguration stationOpcApplicationConfiguration = new OpcApplicationConfiguration();
-            Opc.Ua.ApplicationConfiguration stationApplicationConfiguration = await stationOpcApplicationConfiguration.ConfigureAsync().ConfigureAwait(false);
+            ApplicationConfiguration stationApplicationConfiguration = await stationOpcApplicationConfiguration.ConfigureAsync().ConfigureAwait(false);
 
             // allow canceling the connection process
             try

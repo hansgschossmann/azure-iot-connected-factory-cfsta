@@ -28,9 +28,6 @@ The command line usage is:
               --op, --path=VALUE     the enpoint URL path part of the OPC server
                                        endpoint.
                                        Default: '/UA/cfstation'
-              --sh, --stationhostname=VALUE
-                                     the fullqualified hostname of the station.
-                                       Default: johannglt
               --ga, --generatealerts the station should generate alerts.
                                        Default: False
               --pc, --powerconsumption=VALUE
